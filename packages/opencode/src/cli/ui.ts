@@ -1,7 +1,7 @@
 import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
-import { logo as glyphs } from "./logo"
+import { resolveLogo, type LogoConfig } from "./logo"
 
 export namespace UI {
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -40,9 +40,22 @@ export namespace UI {
     blank = true
   }
 
-  export function logo(pad?: string) {
+  export function logo(pad?: string, input?: LogoConfig) {
     const result: string[] = []
     const reset = "\x1b[0m"
+    const spec = resolveLogo(input)
+    const frame = spec.frames[0]
+
+    if (spec.hidden || !frame) return ""
+
+    if (frame.kind === "plain") {
+      frame.lines.forEach((row) => {
+        if (pad) result.push(pad)
+        result.push(reset, row, reset, EOL)
+      })
+      return result.join("").trimEnd()
+    }
+
     const left = {
       fg: "\x1b[90m",
       shadow: "\x1b[38;5;235m",
@@ -53,19 +66,22 @@ export namespace UI {
       shadow: "\x1b[38;5;238m",
       bg: "\x1b[48;5;238m",
     }
+    const fill = frame.marks[0] ?? "_"
+    const mix = frame.marks[1] ?? "^"
+    const shade = frame.marks[2] ?? "~"
     const gap = " "
     const draw = (line: string, fg: string, shadow: string, bg: string) => {
       const parts: string[] = []
       for (const char of line) {
-        if (char === "_") {
+        if (char === fill) {
           parts.push(bg, " ", reset)
           continue
         }
-        if (char === "^") {
+        if (char === mix) {
           parts.push(fg, bg, "▀", reset)
           continue
         }
-        if (char === "~") {
+        if (char === shade) {
           parts.push(shadow, "▀", reset)
           continue
         }
@@ -77,11 +93,11 @@ export namespace UI {
       }
       return parts.join("")
     }
-    glyphs.left.forEach((row, index) => {
+    frame.left.forEach((row, index) => {
       if (pad) result.push(pad)
       result.push(draw(row, left.fg, left.shadow, left.bg))
       result.push(gap)
-      const other = glyphs.right[index] ?? ""
+      const other = frame.right[index] ?? ""
       result.push(draw(other, right.fg, right.shadow, right.bg))
       result.push(EOL)
     })

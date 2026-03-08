@@ -10,6 +10,22 @@ const KeybindOverride = z
   )
   .strict()
 
+const LogoFrame = z.union([z.string(), z.string().array()])
+
+const Logo = z.union([
+  z.literal(false),
+  z.string(),
+  z
+    .object({
+      text: z.string().optional().describe("Static multi-line logo as a single string"),
+      lines: z.string().array().optional().describe("Static logo lines"),
+      frames: LogoFrame.array().optional().describe("Logo frames for future animated logos"),
+      interval_ms: z.number().int().positive().optional().describe("Animation frame interval in milliseconds"),
+      loop: z.boolean().optional().describe("Whether animated logos loop"),
+    })
+    .strict(),
+])
+
 export const TuiOptions = z.object({
   scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
   scroll_acceleration: z
@@ -29,6 +45,7 @@ export const TuiInfo = z
     $schema: z.string().optional(),
     theme: z.string().optional(),
     keybinds: KeybindOverride.optional(),
+    logo: Logo.optional(),
   })
   .extend(TuiOptions.shape)
   .strict()

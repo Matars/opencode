@@ -1,18 +1,30 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { For, type JSX } from "solid-js"
+import { createMemo, For, Show, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import { logo, marks } from "@/cli/logo"
+import { resolveLogo } from "@/cli/logo"
+import { useTuiConfig } from "../context/tui-config"
 
-// Shadow markers (rendered chars in parens):
-// _ = full shadow cell (space with bg=shadow)
-// ^ = letter top, shadow bottom (▀ with fg=letter, bg=shadow)
-// ~ = shadow top only (▀ with fg=shadow)
-const SHADOW_MARKER = new RegExp(`[${marks}]`)
+const esc = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 export function Logo() {
   const { theme } = useTheme()
+  const cfg = useTuiConfig()
+  const spec = createMemo(() => resolveLogo(cfg.logo))
+  const item = createMemo(() => {
+    const logo = spec()
+    if (logo.hidden) return undefined
+    return logo.frames[0]
+  })
 
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
+  const renderLine = (
+    line: string,
+    fg: RGBA,
+    bold: boolean,
+    marker: RegExp,
+    fill: string,
+    mix: string,
+    top: string,
+  ): JSX.Element[] => {
     const shadow = tint(theme.background, fg, 0.25)
     const attrs = bold ? TextAttributes.BOLD : undefined
     const elements: JSX.Element[] = []
@@ -20,7 +32,7 @@ export function Logo() {
 
     while (i < line.length) {
       const rest = line.slice(i)
-      const markerIndex = rest.search(SHADOW_MARKER)
+      const markerIndex = rest.search(marker)
 
       if (markerIndex === -1) {
         elements.push(
@@ -39,29 +51,27 @@ export function Logo() {
         )
       }
 
-      const marker = rest[markerIndex]
-      switch (marker) {
-        case "_":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              {" "}
-            </text>,
-          )
-          break
-        case "^":
-          elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
-        case "~":
-          elements.push(
-            <text fg={shadow} attributes={attrs} selectable={false}>
-              ▀
-            </text>,
-          )
-          break
+      const char = rest[markerIndex]
+      if (char === fill) {
+        elements.push(
+          <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+            {" "}
+          </text>,
+        )
+      }
+      if (char === mix) {
+        elements.push(
+          <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+            ▀
+          </text>,
+        )
+      }
+      if (char === top) {
+        elements.push(
+          <text fg={shadow} attributes={attrs} selectable={false}>
+            ▀
+          </text>,
+        )
       }
 
       i += markerIndex + 1
@@ -71,15 +81,45 @@ export function Logo() {
   }
 
   return (
-    <box>
-      <For each={logo.left}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
+    <Show when={item()}>
+      {(value) => {
+        const art = value()
+
+        if (art.kind === "plain") {
+          return (
+            <box flexDirection="column">
+              <For each={art.lines}>
+                {(line) => (
+                  <text fg={theme.text} selectable={false}>
+                    {line}
+                  </text>
+                )}
+              </For>
+            </box>
+          )
+        }
+
+        const shadow = art.marks
+        const fill = shadow[0] ?? "_"
+        const mix = shadow[1] ?? "^"
+        const top = shadow[2] ?? "~"
+        const marker = new RegExp(`[${esc(`${fill}${mix}${top}`)}]`)
+
+        return (
+          <box>
+            <For each={art.left}>
+              {(line, index) => (
+                <box flexDirection="row" gap={1}>
+                  <box flexDirection="row">{renderLine(line, theme.textMuted, false, marker, fill, mix, top)}</box>
+                  <box flexDirection="row">
+                    {renderLine(art.right[index()] ?? "", theme.text, true, marker, fill, mix, top)}
+                  </box>
+                </box>
+              )}
+            </For>
           </box>
-        )}
-      </For>
-    </box>
+        )
+      }}
+    </Show>
   )
 }
